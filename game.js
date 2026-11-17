@@ -63,26 +63,28 @@ const SPEEDS = [0, 85, 55, 32];   // velocidad base por tamaño
 const POINTS = [0, 100, 50, 20];  // puntos por tamaño
 
 class Asteroid {
-  constructor(x, y, size = 3) {
+  constructor(x, y, size = 3, shootingStar = false) {
     this.x    = x;
     this.y    = y;
     this.size = size;
-    this.radius = RADII[size];
+    this.shootingStar = shootingStar;
+    this.radius = shootingStar ? 25 : RADII[size];
     this.dead = false;
 
     const angle = rand(0, Math.PI * 2);
-    const speed = SPEEDS[size] + rand(-15, 15);
+    const speed = (SPEEDS[size] + rand(-15, 15)) * (shootingStar ? 2 : 1);
     this.vx = Math.cos(angle) * speed;
     this.vy = Math.sin(angle) * speed;
     this.rotSpeed = rand(-1.2, 1.2);
     this.rot = rand(0, Math.PI * 2);
 
-    // Polígono irregular
-    const n = randInt(8, 13);
+    const n = shootingStar ? 10 : randInt(8, 13);
     this.verts = [];
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
-      const r = this.radius * rand(0.6, 1.0);
+      const r = shootingStar
+        ? this.radius * (i % 2 === 0 ? 1 : 0.45)
+        : this.radius * rand(0.6, 1.0);
       this.verts.push([Math.cos(a) * r, Math.sin(a) * r]);
     }
   }
@@ -94,7 +96,7 @@ class Asteroid {
   }
 
   split() {
-    if (this.size <= 1) return [];
+    if (this.shootingStar || this.size <= 1) return [];
     return [
       new Asteroid(this.x, this.y, this.size - 1),
       new Asteroid(this.x, this.y, this.size - 1),
@@ -104,6 +106,31 @@ class Asteroid {
   draw() {
     ctx.save();
     ctx.translate(this.x, this.y);
+    if (this.shootingStar) {
+      ctx.rotate(Math.atan2(this.vy, this.vx));
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+
+      const trail = ctx.createLinearGradient(-20, 0, -100, 0);
+      trail.addColorStop(0, '#ffd46b');
+      trail.addColorStop(1, 'rgba(255, 212, 107, 0)');
+      ctx.strokeStyle = trail;
+      ctx.beginPath();
+      ctx.moveTo(...this.verts[4]);
+      ctx.quadraticCurveTo(-60, 15, -100, 0);
+      ctx.quadraticCurveTo(-60, -15, ...this.verts[6]);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#ffd46b';
+      ctx.beginPath();
+      ctx.moveTo(...this.verts[0]);
+      for (let i = 1; i < this.verts.length; i++)
+        ctx.lineTo(...this.verts[i]);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
     ctx.rotate(this.rot);
     ctx.strokeStyle = '#fff';
     ctx.lineWidth   = 1.5;
@@ -235,6 +262,31 @@ class Particle {
   }
 }
 
+class FireworkParticle extends Particle {
+  constructor(x, y, angle) {
+    super(x, y);
+    const speed = rand(90, 175);
+    this.vx = Math.cos(angle) * speed;
+    this.vy = Math.sin(angle) * speed;
+    this.life = rand(0.9, 1.3);
+    this.ttl = this.life;
+  }
+
+  draw() {
+    const alpha = Math.max(0, this.ttl / this.life);
+    ctx.strokeStyle = `rgba(255, 195, 80, ${alpha.toFixed(2)})`;
+    ctx.fillStyle = `rgba(255, 235, 160, ${alpha.toFixed(2)})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(this.x, this.y);
+    ctx.lineTo(this.x - this.vx * 0.14, this.y - this.vy * 0.14);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 // ── Speed pickup ──────────────────────────────────────────────────────────────
 function spawnSpeedPickup() {
   let x, y;
@@ -273,7 +325,7 @@ function spawnAsteroids(count) {
       x = rand(0, W);
       y = rand(0, H);
     } while (Math.hypot(x - W / 2, y - H / 2) < SAFE_DIST);
-    asteroids.push(new Asteroid(x, y, 3));
+    asteroids.push(new Asteroid(x, y, 3, Math.random() < 0.2));
   }
 }
 
@@ -302,6 +354,14 @@ function nextLevel() {
 
 function explode(x, y, count = 8) {
   for (let i = 0; i < count; i++) particles.push(new Particle(x, y));
+}
+
+function explodeShootingStar(x, y) {
+  const count = 48;
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2 + rand(-0.05, 0.05);
+    particles.push(new FireworkParticle(x, y, angle));
+  }
 }
 
 function killShip() {
@@ -360,7 +420,8 @@ function update(dt) {
         b.dead = true;
         a.dead = true;
         score += POINTS[a.size];
-        explode(a.x, a.y, a.size * 5);
+        if (a.shootingStar) explodeShootingStar(a.x, a.y);
+        else explode(a.x, a.y, a.size * 5);
         newAsteroids.push(...a.split());
       }
     }
