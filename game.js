@@ -141,7 +141,7 @@ class Ship {
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
 
     const ROT   = 3.5;   // rad/s
-    const THRUST = 260;  // px/s²
+    const THRUST = 260 * (speedTimer > 0 ? 2 : 1);  // px/s²
     const DRAG   = 0.987;
 
     if (keys['ArrowLeft'])  this.angle -= ROT * dt;
@@ -235,11 +235,35 @@ class Particle {
   }
 }
 
+// ── Speed pickup ──────────────────────────────────────────────────────────────
+function spawnSpeedPickup() {
+  let x, y;
+  do {
+    x = rand(30, W - 30);
+    y = rand(40, H - 30);
+  } while (Math.hypot(x - W / 2, y - H / 2) < 130);
+  speedPickup = { x, y, radius: 12 };
+}
+
+function drawSpeedPickup() {
+  if (!speedPickup) return;
+  ctx.strokeStyle = '#00dfff';
+  ctx.fillStyle = '#00dfff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(speedPickup.x, speedPickup.y, speedPickup.radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('S', speedPickup.x, speedPickup.y + 5);
+}
+
 // ── Estado del juego ──────────────────────────────────────────────────────────
 let ship, bullets, asteroids, particles;
 let score, lives, level;
 let state;      // 'playing' | 'dead' | 'gameover'
 let deadTimer;
+let speedPickup, speedTimer;
 
 function spawnAsteroids(count) {
   const SAFE_DIST = 130;
@@ -262,7 +286,9 @@ function initGame() {
   lives  = 3;
   level  = 1;
   state  = 'playing';
+  speedTimer = 0;
   spawnAsteroids(4);
+  spawnSpeedPickup();
 }
 
 function nextLevel() {
@@ -271,6 +297,7 @@ function nextLevel() {
   particles = [];
   ship.reset();
   spawnAsteroids(3 + level);
+  spawnSpeedPickup();
 }
 
 function explode(x, y, count = 8) {
@@ -291,6 +318,7 @@ function killShip() {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 function update(dt) {
+  speedTimer = Math.max(0, speedTimer - dt);
   if (state === 'gameover') {
     if (pressed('Space')) initGame();
     particles.forEach(p => p.update(dt));
@@ -313,6 +341,10 @@ function update(dt) {
   }
 
   ship.update(dt);
+  if (speedPickup && dist(ship, speedPickup) < ship.radius + speedPickup.radius) {
+    speedTimer = 30;
+    speedPickup = null;
+  }
   bullets.forEach(b => b.update(dt));
   asteroids.forEach(a => a.update(dt));
   particles.forEach(p => p.update(dt));
@@ -378,6 +410,11 @@ function drawHUD() {
   ctx.textAlign = 'center';
   ctx.fillText(`NIVEL ${level}`, W / 2, 26);
 
+  if (speedTimer > 0) {
+    ctx.fillStyle = '#00dfff';
+    ctx.fillText(`SPEED ${Math.ceil(speedTimer)}s`, W / 2, 48);
+  }
+
   for (let i = 0; i < lives; i++)
     drawLifeIcon(W - 16 - i * 22, 18);
 
@@ -400,6 +437,7 @@ function draw() {
   particles.forEach(p => p.draw());
   asteroids.forEach(a => a.draw());
   bullets.forEach(b => b.draw());
+  drawSpeedPickup();
   ship.draw();
 
   drawHUD();
