@@ -145,6 +145,32 @@ class Asteroid {
   }
 }
 
+// ── Shapes de la nave ─────────────────────────────────────────────────────────
+const SHAPES = [
+  { name: 'CLASICA', color: '#ffffff', verts: [[20, 0], [-12, -9], [-7, 0], [-12, 9]] },
+  { name: 'DELTA',   color: '#00dfff', verts: [[22, 0], [-10, -13], [-4, -3], [-4, 3], [-10, 13]] },
+  { name: 'CAZA',    color: '#ffd46b', verts: [[20, 0], [2, -5], [-2, -11], [-10, -11], [-6, 0], [-10, 11], [-2, 11], [2, 5]] },
+  { name: 'ORBITAL', color: '#7dff8a', verts: [[20, 0], [10, -5], [4, -12], [-4, -12], [-10, -5], [-20, 0], [-10, 6], [10, 6]] },
+  { name: 'STEALTH', color: '#ff6bd6', verts: [[16, 0], [0, -10], [-16, 0], [0, 10]] },
+];
+
+const SHAPE_KEY = 'asteroids_shape';
+let shapeIndex = loadShapeIndex();
+let shapeNameTimer = 0;
+
+function loadShapeIndex() {
+  try {
+    const i = parseInt(localStorage.getItem(SHAPE_KEY), 10);
+    return Number.isInteger(i) && i >= 0 && i < SHAPES.length ? i : 0;
+  } catch { return 0; }
+}
+
+function cycleShape() {
+  shapeIndex = (shapeIndex + 1) % SHAPES.length;
+  shapeNameTimer = 1.5;
+  try { localStorage.setItem(SHAPE_KEY, String(shapeIndex)); } catch { /* almacenamiento no disponible */ }
+}
+
 // ── Ship ──────────────────────────────────────────────────────────────────────
 class Ship {
   constructor() { this.reset(); }
@@ -203,16 +229,17 @@ class Ship {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
-    ctx.strokeStyle = '#fff';
+
+    const shape = SHAPES[shapeIndex];
+    ctx.strokeStyle = shape.color;
     ctx.lineWidth   = 1.5;
     ctx.lineJoin    = 'round';
 
-    // Silueta clásica: triángulo con muesca trasera
+    // Silueta según shape seleccionada
     ctx.beginPath();
-    ctx.moveTo( 20,  0);   // nariz
-    ctx.lineTo(-12, -9);   // ala izquierda
-    ctx.lineTo( -7,  0);   // muesca trasera
-    ctx.lineTo(-12,  9);   // ala derecha
+    ctx.moveTo(shape.verts[0][0], shape.verts[0][1]);
+    for (let i = 1; i < shape.verts.length; i++)
+      ctx.lineTo(shape.verts[i][0], shape.verts[i][1]);
     ctx.closePath();
     ctx.stroke();
 
@@ -379,8 +406,10 @@ function killShip() {
 // ── Update ────────────────────────────────────────────────────────────────────
 function update(dt) {
   speedTimer = Math.max(0, speedTimer - dt);
+  shapeNameTimer = Math.max(0, shapeNameTimer - dt);
   if (state === 'gameover') {
     if (pressed('Space')) initGame();
+    if (pressed('KeyC')) cycleShape();
     particles.forEach(p => p.update(dt));
     particles = particles.filter(p => !p.dead);
     return;
@@ -399,6 +428,9 @@ function update(dt) {
   if (pressed('Space')) {
     bullets.push(...ship.tryShoot());
   }
+
+  // Cambiar shape de la nave
+  if (pressed('KeyC')) cycleShape();
 
   ship.update(dt);
   if (speedPickup && dist(ship, speedPickup) < ship.radius + speedPickup.radius) {
@@ -445,17 +477,18 @@ function update(dt) {
 
 // ── Draw ──────────────────────────────────────────────────────────────────────
 function drawLifeIcon(x, y) {
+  const shape = SHAPES[shapeIndex];
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(-Math.PI / 2);
-  ctx.strokeStyle = '#fff';
+  ctx.scale(0.6, 0.6);
+  ctx.strokeStyle = shape.color;
   ctx.lineWidth   = 1.2;
   ctx.lineJoin    = 'round';
   ctx.beginPath();
-  ctx.moveTo( 9,  0);
-  ctx.lineTo(-6, -5);
-  ctx.lineTo(-3,  0);
-  ctx.lineTo(-6,  5);
+  ctx.moveTo(shape.verts[0][0], shape.verts[0][1]);
+  for (let i = 1; i < shape.verts.length; i++)
+    ctx.lineTo(shape.verts[i][0], shape.verts[i][1]);
   ctx.closePath();
   ctx.stroke();
   ctx.restore();
@@ -479,6 +512,16 @@ function drawHUD() {
   for (let i = 0; i < lives; i++)
     drawLifeIcon(W - 16 - i * 22, 18);
 
+  // Nombre de la shape activa tras cambiarla
+  if (shapeNameTimer > 0) {
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, shapeNameTimer / 0.5);
+    ctx.fillStyle = SHAPES[shapeIndex].color;
+    ctx.font = 'bold 16px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`SHAPE: ${SHAPES[shapeIndex].name}`, W / 2, H - 24);
+    ctx.restore();
+  }
 }
 
 function drawOverlay(title, sub) {
